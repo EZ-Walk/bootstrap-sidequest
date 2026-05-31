@@ -62,10 +62,13 @@ curl -fsSL "$REPO_RAW/Brewfile" -o "$TMP_BREWFILE"
 log "Running brew bundle…"
 brew bundle --file="$TMP_BREWFILE"
 
-# --- 5. Claude Code (via npm — node was installed by brew bundle) ----------
+# --- 5. Claude Code (native installer — self-updating, no node dependency) -
+# Native installer is preferred over `npm install -g @anthropic-ai/claude-code`
+# because the binary auto-updates itself (`claude` checks for new versions
+# on startup and updates in place), independent of node version churn.
 if ! have claude; then
-  log "Installing Claude Code…"
-  npm install -g @anthropic-ai/claude-code
+  log "Installing Claude Code (native installer)…"
+  curl -fsSL https://claude.ai/install.sh | bash
 fi
 
 # --- 6. Tailscale system daemon -------------------------------------------
