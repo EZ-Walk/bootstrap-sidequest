@@ -8,6 +8,14 @@
 
 set -euo pipefail
 
+# Reattach stdin to the terminal so sudo prompts work when invoked as
+# `curl ... | bash` (stdin is the curl pipe, not a TTY). Without this,
+# every sudo stage silently fails and the script continues with the
+# affected stages no-op'd.
+if [[ ! -t 0 ]] && [[ -e /dev/tty ]]; then
+  exec </dev/tty
+fi
+
 REPO_RAW="https://raw.githubusercontent.com/EZ-Walk/bootstrap-sidequest/main"
 
 log()  { printf "\033[1;34m[bootstrap]\033[0m %s\n" "$*"; }
@@ -60,7 +68,36 @@ if ! have claude; then
   npm install -g @anthropic-ai/claude-code
 fi
 
-# --- 6. Done ---------------------------------------------------------------
+# --- 6. Tailscale system daemon -------------------------------------------
+# The formula installs the binary but does NOT register tailscaled with
+# launchd. Without this, the unsandboxed daemon never runs and `tailscale
+# up` would talk to whichever (sandboxed) daemon happens to be active —
+# breaking `--ssh`. Idempotent: the installer no-ops if already present.
+if have tailscaled; then
+  if ! sudo launchctl print system/com.tailscale.tailscaled >/dev/null 2>&1; then
+    log "Installing tailscaled as a system daemon…"
+    sudo tailscaled install-system-daemon
+  fi
+fi
+
+# --- 7. Headless power management (pmset) ---------------------------------
+# Designed for always-on, unattended Macs. Prevents every sleep mode,
+# enables wake-on-LAN, keeps TCP connections alive. `caffeinate` is NOT
+# sufficient — it only suppresses sleep while a process is running, and
+# does not survive a reboot or terminal exit.
+log "Setting headless power management…"
+sudo pmset -a sleep 0
+sudo pmset -a disablesleep 1     # overrides lid-close sleep on laptops
+sudo pmset -a displaysleep 0
+sudo pmset -a disksleep 0
+sudo pmset -a womp 1             # wake on magic packet (LAN)
+sudo pmset -a powernap 0
+sudo pmset -a hibernatemode 0
+sudo pmset -a autopoweroff 0
+sudo pmset -a standby 0
+sudo pmset -a tcpkeepalive 1
+
+# --- 8. Done ---------------------------------------------------------------
 cat <<EOF
 
 ──────────────────────────────────────────────────────────────────────────────
@@ -70,14 +107,15 @@ cat <<EOF
     • Homebrew, git, gh, curl, wget
     • Node.js (LTS) + npm
     • Python 3.12 + uv
-    • Tailscale (GUI app, in /Applications)
+    • Tailscale CLI + unsandboxed tailscaled daemon
     • Claude Code
+    • Headless pmset profile (never-sleep, wake-on-LAN)
 
   Open a new terminal (or run \`source ~/.zprofile\`), then:
 
-    1. gh auth login            # authenticate GitHub
-    2. open -a Tailscale        # launch Tailscale app, sign in
-    3. claude                   # start Claude Code
+    1. gh auth login                                  # authenticate GitHub
+    2. sudo tailscale up --ssh --accept-routes        # join tailnet + enable SSH
+    3. claude                                         # start Claude Code
 
 ──────────────────────────────────────────────────────────────────────────────
 EOF

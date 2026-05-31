@@ -11,5 +11,7 @@ brew "node"
 brew "python@3.12"
 brew "uv"
 
-# Tailscale (GUI app)
-cask "tailscale"
+# Tailscale (CLI/daemon — formula, NOT the cask, so tailscaled is unsandboxed
+# and `tailscale up --ssh` actually works. The cask installs a sandboxed GUI
+# app that cannot host the Tailscale SSH server.)
+brew "tailscale"
